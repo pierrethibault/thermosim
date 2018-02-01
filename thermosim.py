@@ -10,6 +10,7 @@ def norm(x):
 
 
 def sqrt(x):
+    """Safe square root"""
     return np.sqrt(np.clip(x, 0, np.inf))
 
 
@@ -50,11 +51,6 @@ class Box(object):
         self.g = -.1
         self.t = 0.
 
-        #Brownian motion...
-        #self.m[0] *= 20.
-        #self.v[0] = 0.
-        #self.d[0] *= 15.
-
         self.v2max = np.sqrt((self.v**2).sum(axis=1)).max()
         self.vxmin, self.vxmax = self.v[:, 0].min(), self.v[:, 0].max()
         self.vymin, self.vymax = self.v[:, 1].min(), self.v[:, 1].max()
@@ -93,18 +89,16 @@ class Box(object):
 
     @property
     def T(self):
+        """Temperature"""
         return (self.m * (self.v**2).sum(axis=1)).mean()
 
     def run(self, nsteps=100000, filename=None, blit=False):
+        """Create animation object and start it"""
         self.i = 0
         self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=5., repeat=False, blit=blit)
-        # self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=1/10., repeat=False, blit=True)
         if filename is not None:
-            # Writer = animation.writers['avconv']
-            # writer = Writer(fps=100, metadata=dict(artist='Me'), bitrate=1800)
             Writer = animation.writers['ffmpeg']
             writer = Writer(fps=150, bitrate=500, extra_args=['-filter', 'tblend', '-r', '25'])
-            # writer = Writer(fps=100, bitrate=400, extra_args=['-filter', '''"minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=25'"'''])
             self.animobj._start()
             self.animobj.save(filename, writer=writer)
         else:
@@ -118,6 +112,7 @@ class Box(object):
             pass
 
     def _init(self):
+        """Initialise display"""
         plt.ioff()
         self.fig.clear()
         if self.toshow['velocities']:
@@ -128,8 +123,6 @@ class Box(object):
             f, bins = np.histogram(self.v[:, 0], int(np.sqrt(self.N)), range=(self.vxmin, self.vxmax), density=True)
             binwidth = bins[1]-bins[0]
             self.vhist = axes[1].bar(bins[:-1], f, width=binwidth)
-            # self.cumv = self.v[:,0].tolist()
-            # self.cumhist = axes[1].step(bins[:-1], f, where='post', lw=3, color=(0,0,0,.75))[0]
         else:
             axes = [self.fig.add_subplot(111, aspect='equal', adjustable='box')]
 
@@ -155,12 +148,14 @@ class Box(object):
             return circles,
 
     def set_fig_position(self, x, y, dx, dy):
+        """Set figure windoe position (might work only with QT backend)"""
         plt.get_current_fig_manager().window.setGeometry(x, y, dx, dy)
 
     def set_colors(self, colors):
         self.circles.set_facecolors(colors)
 
     def _update(self, i):
+        """Update plot"""
         self.i = i
         self._step()
         vmag = np.sqrt((self.v**2).sum(axis=1))
@@ -180,24 +175,14 @@ class Box(object):
             for i in range(len(self.vhist)):
                 self.vhist[i].set_height(f[i])
                 self.vhist[i].set_facecolor(self.cm((bins[i]+.5*binwidth)**2/self.v2max))
-            #if (self.t/self.dt) % 30 == 0:
-            #    self.cumv.extend(self.v[:,0].tolist())
-            #    self.cumv.extend(self.v[:,1].tolist())
-            #f, bins = np.histogram(self.cumv, min(int(np.sqrt(len(self.cumv))), 50), range=(self.vxmin, self.vxmax), density=True)
-            #self.cumhist.set_data((bins[:-1], f))
-            #return self.circles, self.vhist, self.cumhist
             return self.circles, self.vhist
         else:
             return self.circles,
 
     def _step(self):
-
+        """Move molecules"""
         self.r += self.dt * self.v
         self.t += self.dt
-
-        ## Gravity
-        #self.r[:,1] += .5*self.dt*self.dt*self.g
-        #self.v[:,1] += self.dt*self.g
 
         self.walls()
         self.collide()
@@ -245,7 +230,6 @@ class Box(object):
                 # Special case: overlapping particles with same velocities
                 ndr = norm(dr)
                 offset = .5*dr*(.5*(d1+d2)/ndr - 1.)
-                #offset = (d1+d2)*np.random.normal(size=dr.shape)
                 self.r[p1] -= offset
                 self.r[p2] += offset
                 continue
