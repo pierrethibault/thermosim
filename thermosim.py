@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 from matplotlib.collections import EllipseCollection
 from matplotlib import pyplot as plt
 from matplotlib import animation
@@ -62,6 +63,9 @@ class Box(object):
         self.colors = 'velocities'
         self._init()
 
+        self._i = None
+        self.animobj = None
+
     @classmethod
     def generic(cls, N=150, L=200., D=3., T=1., ndim=2):
         """
@@ -92,9 +96,16 @@ class Box(object):
         """Temperature"""
         return (self.m * (self.v**2).sum(axis=1)).mean()
 
-    def run(self, nsteps=100000, filename=None, blit=False):
-        """Create animation object and start it"""
-        self.i = 0
+    def run(self, nsteps=100000, filename=None, blit=False, block=None):
+        """Start animation
+
+        nsteps: number of steps
+        filename: if not None, movie file to save to (work in progress)
+        blit: False by default, does not work always
+        block: if True, return only after run is done, if False return immediately
+               if None, returns only in interactive mode
+        """
+        self._i = 0
         self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=5., repeat=False, blit=blit)
         if filename is not None:
             Writer = animation.writers['ffmpeg']
@@ -104,6 +115,11 @@ class Box(object):
         else:
             self.animobj._start()
             plt.show(False)
+            if block or ((block is None) and not hasattr(sys, 'ps1')):
+                plt.pause(.1)
+                while self.animobj.event_source and self.animobj.event_source.callbacks:
+                    plt.pause(.1)
+
 
     def stop(self):
         try:
@@ -122,7 +138,7 @@ class Box(object):
             axes[1].get_yaxis().set_visible(False)
             f, bins = np.histogram(self.v[:, 0], int(np.sqrt(self.N)), range=(self.vxmin, self.vxmax), density=True)
             binwidth = bins[1]-bins[0]
-            self.vhist = axes[1].bar(bins[:-1], f, width=binwidth)
+            self.vhist = axes[1].bar(bins[:-1], f, width=binwidth, align='edge')
         else:
             axes = [self.fig.add_subplot(111, aspect='equal', adjustable='box')]
 
@@ -170,11 +186,15 @@ class Box(object):
             self.set_colors(self.cm(vmag/self.v2max))
 
         if self.toshow['velocities']:
-            f, bins = np.histogram(self.v[:, 0], int(np.sqrt(self.N)), range=(self.vxmin, self.vxmax), density=True)
+            nbins = len(self.vhist)
+            f, bins = np.histogram(self.v[:, 0], nbins, range=(self.vxmin, self.vxmax), density=True)
             binwidth = bins[1]-bins[0]
-            for i in range(len(self.vhist)):
+            for i in range(nbins):
                 self.vhist[i].set_height(f[i])
+                self.vhist[i].set_width(binwidth)
                 self.vhist[i].set_facecolor(self.cm((bins[i]+.5*binwidth)**2/self.v2max))
+                self.vhist[i].set_x(bins[i])
+            self.axes[1].set_xlim(self.vxmin, self.vxmax)
             return self.circles, self.vhist
         else:
             return self.circles,

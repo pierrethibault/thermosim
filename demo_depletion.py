@@ -25,6 +25,5 @@ b.fig.set_size_inches((7, 7), forward=True)
 b.run(2000)
 #b.run(15000, filename='test.mp4')
 
-mpl.pyplot.show(True)
 
 

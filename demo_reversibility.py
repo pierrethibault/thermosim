@@ -1,6 +1,5 @@
 """
 Setting up many small molecules and a big fat one.
-Works only when run interactively
 """
 
 import numpy as np
@@ -9,7 +8,7 @@ import matplotlib as mpl
 
 N = 101
 l = 400
-b = thermosim.Box.generic(N=N, L=[l,l])
+b = thermosim.Box.generic(N=N, L=[l, l])
 b.colors = None
 
 # Put all molecules in bottom half and make them motionless
@@ -24,17 +23,14 @@ b.r[0, 0] = l/2. + .5
 b.d.fill(2.)
 b.d[0] = 100.
 b.m[0] = N/2.
-b.v[0, 1] = -2*np.sqrt(N)/N
+b.v[0, 1] = -4*np.sqrt(N)/N
 b.v[0, 0] = 0.
 
 b._init()
 b.set_colors('k')
 b.fig.set_size_inches((12, 12), forward=True)
-b.run(1500)
-# Here wait for animation to complete
-
+b.run(500, block=True)
 b.v *= -1
 b.run(1500)
-mpl.pyplot.show(True)
 
 
