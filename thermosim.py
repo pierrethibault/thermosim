@@ -58,13 +58,15 @@ class Box(object):
 
         self.fig = plt.figure()
 
-        self.toshow = {'velocities': False}
+        self.toshow = {'velocities': False, 'quiver': False}
 
         self.colors = 'velocities'
         self._init()
 
         self._i = None
         self.animobj = None
+
+        self.highlight_rule = None
 
     @classmethod
     def generic(cls, N=150, L=200., D=3., T=1., ndim=2):
@@ -87,14 +89,19 @@ class Box(object):
         # Velocities
         v = np.random.normal(size=(N, ndim))
         v /= np.sqrt((v**2).sum()/N)
-        v *= np.sqrt(T/m[:, np.newaxis])
+        v *= np.sqrt(2*T/m[:, np.newaxis])
 
         return cls(L, r, v, d, m)
 
     @property
     def T(self):
         """Temperature"""
-        return (self.m * (self.v**2).sum(axis=1)).mean()
+        return (.5*self.m * (self.v**2).sum(axis=1)).mean()
+
+    @property
+    def vRMS(self):
+        """RMS velocity"""
+        return np.sqrt((self.v**2).sum(axis=1).mean())
 
     def run(self, nsteps=100000, filename=None, blit=False, block=None):
         """Start animation
@@ -120,7 +127,6 @@ class Box(object):
                 while self.animobj.event_source and self.animobj.event_source.callbacks:
                     plt.pause(.1)
 
-
     def stop(self):
         try:
             self.animobj._stop()
@@ -142,6 +148,7 @@ class Box(object):
         else:
             axes = [self.fig.add_subplot(111, aspect='equal', adjustable='box')]
 
+
         axes[0].axis([0, self.L[0], 0, self.L[1]])
         axes[0].get_xaxis().set_visible(False)
         axes[0].get_yaxis().set_visible(False)
@@ -153,15 +160,23 @@ class Box(object):
 
         self.fig.tight_layout()
         self.circles = circles
+
+        to_return = (circles,)
+
+        if self.toshow['quiver']:
+            quiver = plt.quiver(self.r[:, 0], self.r[:, 1], self.v[:, 0], self.v[:, 1], units='xy', scale=35.*self.vRMS/self.L.mean())
+            self.quiver = quiver
+            to_return += (quiver,)
+
         self.axes = axes
 
         if self.toshow['velocities']:
             p0 = axes[0].get_position()
             p1 = axes[1].get_position()
             axes[1].set_position([p1.x0, p0.y0, p0.width, p0.height])
-            return circles, self.vhist
-        else:
-            return circles,
+            to_return += (self.vhist,)
+
+        return to_return
 
     def set_fig_position(self, x, y, dx, dy):
         """Set figure windoe position (might work only with QT backend)"""
@@ -185,6 +200,9 @@ class Box(object):
         if self.colors == 'velocities':
             self.set_colors(self.cm(vmag/self.v2max))
 
+        to_return = (self.circles,)
+
+
         if self.toshow['velocities']:
             nbins = len(self.vhist)
             f, bins = np.histogram(self.v[:, 0], nbins, range=(self.vxmin, self.vxmax), density=True)
@@ -195,9 +213,22 @@ class Box(object):
                 self.vhist[i].set_facecolor(self.cm((bins[i]+.5*binwidth)**2/self.v2max))
                 self.vhist[i].set_x(bins[i])
             self.axes[1].set_xlim(self.vxmin, self.vxmax)
-            return self.circles, self.vhist
-        else:
-            return self.circles,
+            to_return += (self.vhist,)
+
+        if self.toshow['quiver']:
+            self.quiver.set_offsets(self.r)
+            self.quiver.set_UVC(self.v[:, 0], self.v[:, 1])
+            to_return += (self.quiver,)
+
+        if self.highlight_rule:
+            highlighted = eval(self.highlight_rule, self.__dict__)
+            lw = 5.
+            self.circles.set_lw([lw if h else 0. for h in highlighted])
+            self.circles.set_edgecolors(['yellow' if h else 'black' for h in highlighted])
+            if self.toshow['quiver']:
+                self.quiver.set_UVC(highlighted*self.v[:, 0], highlighted*self.v[:, 1])
+
+        return to_return
 
     def _step(self):
         """Move molecules"""
