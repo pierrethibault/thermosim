@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 from matplotlib.collections import EllipseCollection
+from matplotlib.patches import Polygon
 from matplotlib import pyplot as plt
 from matplotlib import animation
 from scipy.spatial.distance import squareform, pdist
@@ -61,12 +62,14 @@ class Box(object):
         self.toshow = {'velocities': False, 'quiver': False}
 
         self.colors = 'velocities'
+        self.obstacles = []
         self._init()
 
         self._i = None
         self.animobj = None
 
         self.highlight_rule = None
+
 
     @classmethod
     def generic(cls, N=150, L=200., D=3., T=1., ndim=2):
@@ -176,6 +179,11 @@ class Box(object):
             axes[1].set_position([p1.x0, p0.y0, p0.width, p0.height])
             to_return += (self.vhist,)
 
+        if self.obstacles:
+            for obs in self.obstacles:
+                vc = obs['vertices']
+                axes[0].add_patch(Polygon(vc, facecolor='black'))
+
         return to_return
 
     def set_fig_position(self, x, y, dx, dy):
@@ -201,7 +209,6 @@ class Box(object):
             self.set_colors(self.cm(vmag/self.v2max))
 
         to_return = (self.circles,)
-
 
         if self.toshow['velocities']:
             nbins = len(self.vhist)
@@ -230,6 +237,21 @@ class Box(object):
 
         return to_return
 
+    def add_obstacle(self, vc):
+        """
+        Add an obstacle (convex polygon defined by vertices vc).
+        """
+        # Construct edges info
+        edges = []
+        for i in range(len(vc)):
+            a = vc[i] - vc[i-1]
+            n = np.array([-a[1], a[0]])
+            n /= norm(n)
+            edges.append((n, np.dot(n, vc[i])))
+
+        # Store
+        self.obstacles.append({'vertices': vc, 'edges': edges})
+
     def _step(self):
         """Move molecules"""
         self.r += self.dt * self.v
@@ -237,6 +259,7 @@ class Box(object):
 
         self.walls()
         self.collide()
+        self.obs_collide()
 
     def walls(self):
         """
@@ -249,6 +272,89 @@ class Box(object):
             d1 = self.r[:, dim] + .5*self.d - self.bounds[dim][1]
             self.r[d1 > 0, dim] -= 2*d1[d1 > 0]
             self.v[d1 > 0, dim] *= -1
+
+    def obs_collide(self):
+        """
+        Process collisions with additional rectangular obstacles
+        """
+        for obs in self.obstacles:
+            vc = obs['vertices']
+            ec = obs['edges']
+            Nn = len(ec)
+
+            nn = np.array([n for n,e in ec])
+
+            # Find molecules that collided
+            dw = np.array([np.dot(self.r, n) - .5*self.d - e for n, e in ec]).T
+            hit = (dw < 0).all(axis=1)
+
+            if not hit.any():
+                # No particle collided
+                continue
+
+            Nh = hit.sum()
+
+            # Work on subset
+            r = self.r[hit]
+            v = self.v[hit]
+            d = self.d[hit]
+            dw = dw[hit]
+
+            # Find which facet was hit
+            dta = dw / np.dot(v, nn.T)
+            dta[dta < 0] = 1e12
+
+            # Which wall was hit?
+            wi = np.argmin(dta, axis=1)
+
+            # How long ago?
+            dt = np.min(dta, axis=1)
+
+            # Backtrack
+            rc = r - dt[:, None]*v
+
+            # Process individually
+            for i in range(Nh):
+                rcc = rc[i]
+                rr = r[i]
+                vv = v[i]
+                dd = d[i]
+
+                # Check if we hit a corner
+                vc0, vc1 = vc[wi[i]-1], vc[wi[i]]
+                vcc = None
+                if np.dot(rcc-vc0, vc1 - vc0) < 0:
+                    vcc = vc0
+                elif np.dot(rcc-vc1, vc0 - vc1) < 0:
+                    vcc = vc1
+
+                if vcc is not None:
+                    # Corner collision
+                    dr = rr - vcc
+
+                    ndv = norm(vv)
+                    ru = np.dot(vv, dr) / ndv
+                    b2 = ru**2 + .25*dd**2 - np.dot(dr, dr)
+                    if b2 < 0:
+                        # No collision - this should not happen
+                        continue
+
+                    ds = ru + sqrt(b2)
+                    dtc = ds / ndv
+                    drc = dr - vv * dtc
+
+                    # Store new values
+                    v[i] = vv - 2. * drc * np.dot(vv, drc) / np.dot(drc, drc)
+                    r[i] = rr + (v[i] - vv) * dtc
+
+                else:
+                    # Edge collision
+                    v[i] -= 2 * np.dot(v[i], nn[wi[i]]) * nn[wi[i]]
+                    r[i] = rcc + dt[i]*v[i]
+
+            # Put everything back in
+            self.v[hit] = v
+            self.r[hit] = r
 
     def collide(self):
         """
@@ -312,6 +418,62 @@ class Box(object):
             self.r[p2] = r2f
             self.v[p1] = v1f
             self.v[p2] = v2f
+
+    @staticmethod
+    def _disc_collide(r1, v1, d1, m1, r2, v2=None, d2=0., m2=None):
+        """
+        Collision between two discs.
+        """
+        if v2 is None:
+            v2 = v1*0.
+
+        # Relative positions and velocities
+        dv = v2 - v1
+        dr = r2 - r1
+
+        # Backtrack
+        ndv = norm(dv)
+        if ndv == 0:
+            # Special case: overlapping particles with same velocities
+            ndr = norm(dr)
+            offset = .5 * dr * (.5 * (d1 + d2) / ndr - 1.)
+            r1out = r1 - offset
+            r2out = r2 + offset
+            return r1out, v1, r2out, v2
+
+        ru = np.dot(dv, dr) / ndv
+        b2 = ru ** 2 + .25 * (d1 + d2) ** 2 - np.dot(dr, dr)
+        if b2 < 0:
+            # No collision
+            return None, None, None, None
+        ds = ru + sqrt(b2)
+
+        # Time since collision
+        dtc = ds / ndv
+
+        # New collision parameter
+        drc = dr - dv * dtc
+
+        # Center of mass velocity
+        if m2 is None:
+            m1r = 0,
+            m2r = 1.
+        else:
+            m1r = m1/(m1+m2)
+            m2r = m2/(m1+m2)
+
+        vcm = m1r * v1 + m2r * v2
+
+        # Velocities after collision
+        dvf = dv - 2. * drc * np.dot(dv, drc) / np.dot(drc, drc)
+        v1f = vcm - dvf * m2r
+        v2f = vcm + dvf * m1r
+
+        # Backtracked positions
+        r1f = r1 + (v1f - v1) * dtc
+        r2f = r2 + (v2f - v2) * dtc
+
+        return r1f, v1f, r2f, v2f
 
     def show(self, what=None):
         if what is None:

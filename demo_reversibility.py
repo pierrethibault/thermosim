@@ -29,7 +29,7 @@ b.v[0, 0] = 0.
 b._init()
 b.set_colors('k')
 b.fig.set_size_inches((12, 12), forward=True)
-b.run(500, block=True)
+b.run(1500, block=True)
 b.v *= -1
 b.run(1500)
 
