@@ -1,11 +1,15 @@
 import thermosim
 import numpy as np
 
-L = 200.
-w = 30.
-b = thermosim.Box.generic(N=300, L=[400, 200])
-b.r = 200*np.random.uniform(size=(300,2))
-b.add_obstacle(np.array([[L-1,(L+w)/2], [L-1, L],[L+1,L], [L+1,(L+w)/2]]))
-b.add_obstacle(np.array([[L+1,(L-w)/2], [L+1, 0],[L-1,0], [L-1,(L-w)/2]]))
+# Start with 600 blue molecules
+L = 400
+b = thermosim.Box.generic(N=2000, L=[L, L])
+
+R = 50
+colors = ['red' if ((r-L/2)**2).sum()<R**2 else 'skyblue' for r in b.r]
+b.colors = None
 b._init()
-b.run(10000)
+b.set_colors(colors)
+b.set_fig_position(0, 0, 1286, 1150)
+b.v *=.5
+b.run(100000, blit=True)
