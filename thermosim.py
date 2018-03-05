@@ -59,7 +59,7 @@ class Box(object):
 
         self.fig = plt.figure()
 
-        self.toshow = {'velocities': False, 'quiver': False}
+        self.toshow = {'velocities': False, 'quiver': False, 'trace': None}
 
         self.colors = 'velocities'
         self.obstacles = []
@@ -166,6 +166,11 @@ class Box(object):
 
         to_return = (circles,)
 
+        if self.toshow['trace'] is not None:
+            i = self.toshow['trace']
+            self.trace = plt.plot([self.r[i, 0]], [self.r[i,1]], 'k-')[0]
+            to_return += (self.trace,)
+
         if self.toshow['quiver']:
             quiver = plt.quiver(self.r[:, 0], self.r[:, 1], self.v[:, 0], self.v[:, 1], units='xy', scale=35.*self.vRMS/self.L.mean())
             self.quiver = quiver
@@ -221,6 +226,13 @@ class Box(object):
                 self.vhist[i].set_x(bins[i])
             self.axes[1].set_xlim(self.vxmin, self.vxmax)
             to_return += (self.vhist,)
+
+        if self.toshow['trace'] is not None:
+            i = self.toshow['trace']
+            x, y = self.trace.get_data()
+            x = np.append(x, self.r[i,0])
+            y = np.append(y, self.r[i,1])
+            self.trace.set_data(x,y)
 
         if self.toshow['quiver']:
             self.quiver.set_offsets(self.r)
