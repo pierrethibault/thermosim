@@ -60,6 +60,7 @@ class Box(object):
         self.fig = plt.figure()
 
         self.toshow = {'velocities': False, 'quiver': False, 'trace': None}
+        self._vtrace = None
 
         self.colors = 'velocities'
         self.obstacles = []
@@ -169,6 +170,7 @@ class Box(object):
         if self.toshow['trace'] is not None:
             i = self.toshow['trace']
             self.trace = plt.plot([self.r[i, 0]], [self.r[i,1]], 'k-')[0]
+            self._vtrace = self.v[i].copy()
             to_return += (self.trace,)
 
         if self.toshow['quiver']:
@@ -201,7 +203,11 @@ class Box(object):
     def _update(self, i):
         """Update plot"""
         self.i = i
+
+        # Compute move
         self._step()
+
+        # Velocity statistics
         vmag = np.sqrt((self.v**2).sum(axis=1))
         self.v2max = max(self.v2max, vmag.max())
         self.vxmax = max(self.vxmax, self.v[:, 0].max())
@@ -209,7 +215,10 @@ class Box(object):
         self.vymax = max(self.vymax, self.v[:, 1].max())
         self.vymin = min(self.vymin, self.v[:, 1].min())
 
+        # Move molecules
         self.circles.set_offsets(self.r)
+
+        # Change colours
         if self.colors == 'velocities':
             self.set_colors(self.cm(vmag/self.v2max))
 
@@ -229,10 +238,16 @@ class Box(object):
 
         if self.toshow['trace'] is not None:
             i = self.toshow['trace']
+            newv = self.v[i]
             x, y = self.trace.get_data()
-            x = np.append(x, self.r[i,0])
-            y = np.append(y, self.r[i,1])
+            if not np.allclose(self._vtrace, newv):
+                x = np.append(x, self.r[i,0])
+                y = np.append(y, self.r[i,1])
+            else:
+                x[-1] = self.r[i,0]
+                y[-1] = self.r[i,1]
             self.trace.set_data(x,y)
+            self._vtrace = newv.copy()
 
         if self.toshow['quiver']:
             self.quiver.set_offsets(self.r)
