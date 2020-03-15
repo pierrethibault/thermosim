@@ -16,6 +16,108 @@ def sqrt(x):
     return np.sqrt(np.clip(x, 0, np.inf))
 
 
+class VelocityPanel(object):
+    """
+    A display panel in addition to the box. Here, showing velocity histogram
+    """
+    def __init__(self, box):
+        self.box = box
+
+    def init(self, ax):
+        self.ax = ax
+        b = self.box
+        ax.set_xlabel('velocity along x')
+        ax.get_yaxis().set_visible(False)
+        f, bins = np.histogram(b.v[:, 0], int(np.sqrt(b.N)), range=(b.vxmin, b.vxmax), density=True)
+        binwidth = bins[1] - bins[0]
+
+        # Create bar graph
+        self.vhist = ax.bar(bins[:-1], f, width=binwidth, align='edge')
+
+        p0 = ax.get_position()
+        p1 = ax.get_position()
+        ax.set_position([p1.x0, p0.y0, p0.width, p0.height])
+        return self.vhist,
+
+    def update(self, i):
+        b = self.box
+
+        # Recompute histogram
+        nbins = len(self.vhist)
+        f, bins = np.histogram(b.v[:, 0], nbins, range=(b.vxmin, b.vxmax), density=True)
+        self.ax.set_xlim(b.vxmin, b.vxmax)
+        binwidth = bins[1] - bins[0]
+
+        # Update histogram
+        for i in range(nbins):
+            self.vhist[i].set_height(f[i])
+            self.vhist[i].set_width(binwidth)
+            self.vhist[i].set_facecolor(b.cm((bins[i] + .5 * binwidth) ** 2 / b.v2max))
+            self.vhist[i].set_x(bins[i])
+        # Adjust vertical extent.
+        ylim = self.ax.get_ylim()[1]
+        dylim = 1.2 * f.max() - ylim
+        if abs(dylim) > .1 * ylim:
+            new_ylim = ylim + .1 * (dylim)
+            self.ax.set_ylim(ymax=new_ylim)
+
+        return self.vhist,
+
+
+class MFPPanel(object):
+    """
+    A display panel in addition to the box. Here, showing mean free path plot
+    """
+
+    def __init__(self, box):
+        self.box = box
+        self.trace_length = 1
+        self.nbins = 30
+
+    def init(self, ax):
+        self.ax = ax
+        b = self.box
+        ax.set_xlabel('free path')
+        ax.get_yaxis().set_visible(False)
+        ax.set_ylim(ymin=0.)
+        f, bins = np.histogram([], self.nbins, range=(0, 3*b.mfp), density=True)
+        binwidth = bins[1] - bins[0]
+
+        # Create bar graph
+        self.vhist = ax.bar(bins[:-1], f, width=binwidth, align='edge')
+
+        p0 = ax.get_position()
+        p1 = ax.get_position()
+        ax.set_position([p1.x0, p0.y0, p0.width, p0.height])
+        return self.vhist,
+
+    def update(self, i):
+        b = self.box
+
+        # Recompute histogram
+        x, y = b.trace.get_data()
+        if len(x) <= self.trace_length:
+            # Nothing to do
+            return self.vhist,
+        self.trace_length = len(x)
+        paths = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
+        xlim = max(3*b.mfp, paths.max())
+        f, bins = np.histogram(paths, self.nbins, range=(0, xlim), density=True)
+        self.ax.set_xlim(0, xlim)
+        binwidth = bins[1] - bins[0]
+
+        # Update histogram
+        for i in range(self.nbins):
+            self.vhist[i].set_height(f[i])
+            self.vhist[i].set_width(binwidth)
+            self.vhist[i].set_x(bins[i])
+
+        # Adjust vertical extent
+        self.ax.set_ylim(ymax=1.2*f.max())
+
+        return self.vhist,
+
+
 class Box(object):
 
     def __init__(self, L, r, v, d, m, **kwargs):
@@ -68,11 +170,11 @@ class Box(object):
         # For pressure calculation
         self._pressure = None
         self._wall_momentum = [0.]
-        self._wall_momentum_theory = [0.]
+        self._wall_momentum_theory = 0.
         self._pressure_t = [0.]
 
-        # Real volume
-        self.real_volume = np.prod(self.L-self.d.mean()) - .25*np.pi*sum(self.d**2)
+        # Real volume (will be computed in _init)
+        self.real_volume = 0.
 
         # For obstacle collisions
         self.obstacles = []
@@ -165,7 +267,7 @@ class Box(object):
         """
 
         # Recompute volume
-        self.real_volume = np.prod(self.L-self.d.mean()) - .25*np.pi*sum(self.d**2)
+        self.real_volume = np.prod(self.L-self.d.mean()) - .5*np.pi*sum(self.d**2)
 
         # No update during setup
         plt.ioff()
@@ -174,10 +276,11 @@ class Box(object):
         show_v = self.toshow['velocities']
         show_s = self.toshow['speeds']
         show_p = self.toshow['pressure']
-        if sum([show_v, show_s, show_p]) > 1:
+        show_t = self.toshow['trace'] is not None
+        if sum([show_v, show_s, show_p, show_t]) > 1:
             raise RuntimeError('Can show only velocities OR speeds OR pressure')
 
-        if show_v or show_s or show_p:
+        if show_v or show_s or show_p or show_t:
             # Create two side-by-side axes, with a histogram of the x-component of the velodicities in the second one. 
             axes = [self.fig.add_subplot(121, aspect='equal', adjustable='box'),
                     self.fig.add_subplot(122)]
@@ -187,17 +290,21 @@ class Box(object):
                 axes[1].set_xlabel('speeds')
             elif show_p:
                 axes[1].set_xlabel('time')
+            elif show_t:
+                self.panel = MFPPanel(self)
 
             if show_p:
                 axes[1].set_ylabel('momentum')
-            else:
+            elif show_v or show_s:
                 # Y axis does not mean much
                 axes[1].get_yaxis().set_visible(False)
 
             if show_p:
                 self._pressure = 0
-                self.plot_pressure, self.plot_pressure_theory = axes[1].plot([0], [0], 'b-', [0], [0], 'k-')
-            else:
+                self.plot_pressure = axes[1].plot([0], [0], 'b-', label='Total momentum')[0]
+                self.plot_pressure_theory = axes[1].plot([0, 0], [0, 0], 'k-', label='Total momentum (theory)')[0]
+                axes[1].legend(loc='upper left')
+            elif show_v or show_s:
                 # Generate initial histogram
                 if show_v:
                     f, bins = np.histogram(self.v[:, 0], int(np.sqrt(self.N)), range=(self.vxmin, self.vxmax), density=True)
@@ -233,7 +340,7 @@ class Box(object):
         # Option to show the trace of one particle (to illustrate random walk)
         if self.toshow['trace'] is not None:
             i = self.toshow['trace']
-            self.trace = plt.plot([self.r[i, 0]], [self.r[i,1]], 'k-')[0]
+            self.trace = axes[0].plot([self.r[i, 0]], [self.r[i,1]], 'k-')[0]
             self._vtrace = self.v[i].copy()
             to_return += (self.trace,)
 
@@ -256,6 +363,9 @@ class Box(object):
             p1 = axes[1].get_position()
             axes[1].set_position([p1.x0, p0.y0, p0.width, p0.height])
             to_return += (self.plot_pressure, self.plot_pressure_theory)
+
+        if show_t:
+            to_return += self.panel.init(axes[1])
 
         # Process all obstacles (polygons)
         if self.obstacles:
@@ -329,7 +439,7 @@ class Box(object):
         if show_p:
             # Update plot data
             self.plot_pressure.set_data(self._pressure_t, self._wall_momentum)
-            #self.plot_pressure_theory.set_data(self._pressure_t, self._wall_momentum_theory)
+            self.plot_pressure_theory.set_data([0, self._pressure_t[-1]], [0, self._wall_momentum_theory])
             self.axes[1].set_xlim(0, self._pressure_t[-1])
             self.axes[1].set_ylim(np.min(self._wall_momentum), np.max(self._wall_momentum))
             to_return += (self.plot_pressure, self.plot_pressure_theory)
@@ -346,6 +456,8 @@ class Box(object):
                 y[-1] = self.r[i,1]
             self.trace.set_data(x,y)
             self._vtrace = newv.copy()
+            to_return += (self.trace,)
+            to_return += self.panel.update(i)
 
         if self.toshow['quiver']:
             self.quiver.set_offsets(self.r)
@@ -401,9 +513,12 @@ class Box(object):
             self.v[d1 > 0, dim] *= -1
 
             if self._pressure == dim:
+                #self._pressure_t.append(self._pressure_t[-1] + self.dt)
+                #self._wall_momentum.append(self._wall_momentum[-1] - 2 * sum(self.m[d1 > 0] * self.v[d1 > 0, dim]))
+                #self._wall_momentum_theory.append(self._wall_momentum_theory[-1] + self.P*self.L[dim]*self.dt)
+                self._pressure_t.append(self.t)
                 self._wall_momentum.append(self._wall_momentum[-1] - 2 * sum(self.m[d1 > 0] * self.v[d1 > 0, dim]))
-                self._wall_momentum_theory.append(self._wall_momentum_theory[-1] + self.P*self.L[dim]*self.dt)
-                self._pressure_t.append(self._pressure_t[-1] + self.dt)
+                self._wall_momentum_theory = self.P*self.L[dim]*self.t
 
     def obs_collide(self):
         """
