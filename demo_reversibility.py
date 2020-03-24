@@ -31,7 +31,7 @@ b.set_colors('k')
 b.fig.set_size_inches((12, 12), forward=True)
 b.run(1500, block=True)
 b.v *= -1
-raw_input('Hit enter to continue')
+input('Hit enter to continue')
 b.run(1500)
 
 

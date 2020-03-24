@@ -1,7 +1,7 @@
 import thermosim
 
 b = thermosim.Box.generic(D=2., N=2000)
-b.show('speeds')
+b.side_panel = 'speeds'
 b.colors = None
 b.m[:400] = 40.
 b._init()

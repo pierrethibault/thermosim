@@ -32,6 +32,6 @@ b.dt = .02
 b.run(600, block=True)
 b.v *= -1
 b.dt = .04
-print "b.run(300)"
+print("b.run(300)")
 
 

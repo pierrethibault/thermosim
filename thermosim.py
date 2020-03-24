@@ -25,6 +25,7 @@ class VelocityPanel(object):
 
     def init(self, ax):
         self.ax = ax
+        self.ax.clear()
         b = self.box
         ax.set_xlabel('velocity along x')
         ax.get_yaxis().set_visible(False)
@@ -64,6 +65,55 @@ class VelocityPanel(object):
         return self.vhist,
 
 
+class SpeedPanel(object):
+    """
+    A display panel in addition to the box. Here, showing velocity histogram
+    """
+    def __init__(self, box):
+        self.box = box
+
+    def init(self, ax):
+        self.ax = ax
+        self.ax.clear()
+        b = self.box
+        ax.set_xlabel('velocity along x')
+        ax.get_yaxis().set_visible(False)
+        f, bins = np.histogram(np.sqrt((b.v ** 2).sum(axis=1)), int(np.sqrt(b.N)),
+                                range=(0., b.v2max), density=True)
+        binwidth = bins[1] - bins[0]
+
+        # Create bar graph
+        self.vhist = ax.bar(bins[:-1], f, width=binwidth, align='edge')
+
+        p0 = ax.get_position()
+        p1 = ax.get_position()
+        ax.set_position([p1.x0, p0.y0, p0.width, p0.height])
+        return self.vhist,
+
+    def update(self, i):
+        b = self.box
+
+        # Recompute histogram
+        nbins = len(self.vhist)
+        f, bins = np.histogram(np.sqrt((b.v**2).sum(axis=1)), nbins, range=(0, b.v2max), density=True)
+        self.ax.set_xlim(0, b.v2max)
+        binwidth = bins[1] - bins[0]
+
+        # Update histogram
+        for i in range(nbins):
+            self.vhist[i].set_height(f[i])
+            self.vhist[i].set_width(binwidth)
+            self.vhist[i].set_facecolor(b.cm((bins[i] + .5 * binwidth) ** 2 / b.v2max))
+            self.vhist[i].set_x(bins[i])
+        # Adjust vertical extent.
+        ylim = self.ax.get_ylim()[1]
+        dylim = 1.2 * f.max() - ylim
+        if abs(dylim) > .1 * ylim:
+            new_ylim = ylim + .1 * (dylim)
+            self.ax.set_ylim(ymax=new_ylim)
+
+        return self.vhist,
+
 class MFPPanel(object):
     """
     A display panel in addition to the box. Here, showing mean free path plot
@@ -76,6 +126,7 @@ class MFPPanel(object):
 
     def init(self, ax):
         self.ax = ax
+        ax.clear()
         b = self.box
         ax.set_xlabel('free path')
         ax.get_yaxis().set_visible(False)
@@ -117,6 +168,59 @@ class MFPPanel(object):
 
         return self.vhist,
 
+class PressurePanel(object):
+    """
+    A display panel in addition to the box. Here, showing cumulative momentum on one of the walls
+    """
+
+    def __init__(self, box):
+        self.box = box
+        self.trace_length = 1
+        self.nbins = 30
+
+    def init(self, ax):
+        self.ax = ax
+        ax.clear()
+        self.box._pressure = 0
+        self.plot_pressure = ax.plot([0], [0], 'b-', label='Total momentum')[0]
+        self.plot_pressure_theory = ax.plot([0, 0], [0, 0], 'k-', label='Total momentum (theory)')[0]
+        ax.legend(loc='upper left')
+        b = self.box
+        ax.set_xlabel('time')
+        ax.set_ylabel('momentum')
+        ax.set_ylim(ymin=0.)
+
+        p0 = ax.get_position()
+        p1 = ax.get_position()
+        ax.set_position([p1.x0, p0.y0, p0.width, p0.height])
+        return self.plot_pressure, self.plot_pressure_theory
+
+    def update(self, i):
+        b = self.box
+
+        # Update plot data
+        self.plot_pressure.set_data(b._pressure_t, b._wall_momentum)
+        self.plot_pressure_theory.set_data([0, b._pressure_t[-1]], [0, b._wall_momentum_theory])
+        self.ax.set_xlim(0, b._pressure_t[-1])
+        self.ax.set_ylim(np.min(b._wall_momentum), np.max(b._wall_momentum))
+        return self.plot_pressure, self.plot_pressure_theory
+
+class TimePanel(object):
+    """
+    A display panel in addition to the box. Here, showing mean free path plot
+    """
+
+    def __init__(self, box):
+        self.box = box
+
+    def init(self, ax):
+        self.ax = ax
+        ax.clear()
+        b = self.box
+
+    def update(self, i):
+        b = self.box
+
 
 class Box(object):
 
@@ -141,6 +245,9 @@ class Box(object):
         # Initialise time
         self.t = 0.
 
+        # Number of steps (defined in run)
+        self.nsteps = None
+        
         # Optimal time step ~ .25 * (D/v_RMS)
         self.dt = .25*d.mean()/np.sqrt(2*(self.v**2).mean())
 
@@ -161,8 +268,13 @@ class Box(object):
 
         self.fig = plt.figure()
 
+        # 'velocities', 'quiver', 'trace', 'speeds', 'pressure'
         #self.toshow = {'velocities': False, 'quiver': False, 'trace': None, 'speeds': False}
-        self.toshow = {'velocities': False, 'quiver': False, 'trace': None, 'speeds': False, 'pressure': False}
+        self.side_panel = None
+        self.panel = None
+
+        self.show_trace = None
+        self.show_quiver = None
 
         # For molecule trace
         self._vtrace = None
@@ -181,6 +293,8 @@ class Box(object):
 
         # Default coloring
         self.colors = 'velocities'
+
+        self._colors = None
 
         # Create display
         self._init()
@@ -241,6 +355,7 @@ class Box(object):
                if None, returns only in interactive mode
         """
         self._i = 0
+        self.nsteps = nsteps
         self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=5., repeat=False, blit=blit)
         if filename is not None:
             Writer = animation.writers['ffmpeg']
@@ -273,48 +388,20 @@ class Box(object):
         plt.ioff()
         self.fig.clear()
 
-        show_v = self.toshow['velocities']
-        show_s = self.toshow['speeds']
-        show_p = self.toshow['pressure']
-        show_t = self.toshow['trace'] is not None
-        if sum([show_v, show_s, show_p, show_t]) > 1:
-            raise RuntimeError('Can show only velocities OR speeds OR pressure')
-
-        if show_v or show_s or show_p or show_t:
+        if self.side_panel is not None:
             # Create two side-by-side axes, with a histogram of the x-component of the velodicities in the second one. 
             axes = [self.fig.add_subplot(121, aspect='equal', adjustable='box'),
                     self.fig.add_subplot(122)]
-            if show_v:
-                axes[1].set_xlabel('velocity along x')
-            elif show_s:
-                axes[1].set_xlabel('speeds')
-            elif show_p:
-                axes[1].set_xlabel('time')
-            elif show_t:
+            if self.side_panel in ['velocity', 'velocities']:
+                self.panel = VelocityPanel(self)
+            elif self.side_panel in ['speed', 'speeds']:
+                self.panel = SpeedPanel(self)
+            elif self.side_panel == 'pressure':
+                self.panel = PressurePanel(self)
+            elif self.side_panel == 'trace':
                 self.panel = MFPPanel(self)
-
-            if show_p:
-                axes[1].set_ylabel('momentum')
-            elif show_v or show_s:
-                # Y axis does not mean much
-                axes[1].get_yaxis().set_visible(False)
-
-            if show_p:
-                self._pressure = 0
-                self.plot_pressure = axes[1].plot([0], [0], 'b-', label='Total momentum')[0]
-                self.plot_pressure_theory = axes[1].plot([0, 0], [0, 0], 'k-', label='Total momentum (theory)')[0]
-                axes[1].legend(loc='upper left')
-            elif show_v or show_s:
-                # Generate initial histogram
-                if show_v:
-                    f, bins = np.histogram(self.v[:, 0], int(np.sqrt(self.N)), range=(self.vxmin, self.vxmax), density=True)
-                else:
-                    f, bins = np.histogram(np.sqrt((self.v ** 2).sum(axis=1)), int(np.sqrt(self.N)),
-                                           range=(0., self.v2max), density=True)
-                binwidth = bins[1] - bins[0]
-                # Create bar graph
-                self.vhist = axes[1].bar(bins[:-1], f, width=binwidth, align='edge')
-
+            else:
+                RuntimeError('Unknown side_panel option %s' % self.side_panel)
         else:
             # Create just one axis - the particle box
             axes = [self.fig.add_subplot(111, aspect='equal', adjustable='box')]
@@ -338,33 +425,21 @@ class Box(object):
         to_return = (circles,)
 
         # Option to show the trace of one particle (to illustrate random walk)
-        if self.toshow['trace'] is not None:
-            i = self.toshow['trace']
+        if self.show_trace is not None:
+            i = self.show_trace
             self.trace = axes[0].plot([self.r[i, 0]], [self.r[i,1]], 'k-')[0]
             self._vtrace = self.v[i].copy()
             to_return += (self.trace,)
 
         # Option to show velocity arrows
-        if self.toshow['quiver']:
+        if self.show_quiver:
             quiver = plt.quiver(self.r[:, 0], self.r[:, 1], self.v[:, 0], self.v[:, 1], units='xy', scale=35.*self.vRMS/self.L.mean())
             self.quiver = quiver
             to_return += (quiver,)
 
         self.axes = axes
 
-        if show_s or show_v:
-            p0 = axes[0].get_position()
-            p1 = axes[1].get_position()
-            axes[1].set_position([p1.x0, p0.y0, p0.width, p0.height])
-            to_return += (self.vhist,)
-
-        if show_p:
-            p0 = axes[0].get_position()
-            p1 = axes[1].get_position()
-            axes[1].set_position([p1.x0, p0.y0, p0.width, p0.height])
-            to_return += (self.plot_pressure, self.plot_pressure_theory)
-
-        if show_t:
+        if self.panel is not None:
             to_return += self.panel.init(axes[1])
 
         # Process all obstacles (polygons)
@@ -379,7 +454,11 @@ class Box(object):
         """Set figure windoe position (might work only with QT backend)"""
         plt.get_current_fig_manager().window.setGeometry(x, y, dx, dy)
 
-    def set_colors(self, colors):
+    def set_colors(self, colors=None):
+        if colors is None:
+            colors = self._colors
+        else:
+            self._colors = colors
         self.circles.set_facecolors(colors)
 
     def _update(self, i):
@@ -406,11 +485,10 @@ class Box(object):
 
         to_return = (self.circles,)
 
-        show_v = self.toshow['velocities']
-        show_s = self.toshow['speeds']
-        show_p = self.toshow['pressure']
+        if self.panel is not None:
+            to_return += self.panel.update(i)
 
-        if show_v or show_s:
+        """
             # Recompute histogram
             nbins = len(self.vhist)
             if show_v:
@@ -435,17 +513,10 @@ class Box(object):
                 self.axes[1].set_ylim(ymax=new_ylim)
 
             to_return += (self.vhist,)
-
-        if show_p:
-            # Update plot data
-            self.plot_pressure.set_data(self._pressure_t, self._wall_momentum)
-            self.plot_pressure_theory.set_data([0, self._pressure_t[-1]], [0, self._wall_momentum_theory])
-            self.axes[1].set_xlim(0, self._pressure_t[-1])
-            self.axes[1].set_ylim(np.min(self._wall_momentum), np.max(self._wall_momentum))
-            to_return += (self.plot_pressure, self.plot_pressure_theory)
-
-        if self.toshow['trace'] is not None:
-            i = self.toshow['trace']
+        """
+        
+        if self.show_trace is not None:
+            i = self.show_trace
             newv = self.v[i]
             x, y = self.trace.get_data()
             if not np.allclose(self._vtrace, newv):
@@ -457,9 +528,8 @@ class Box(object):
             self.trace.set_data(x,y)
             self._vtrace = newv.copy()
             to_return += (self.trace,)
-            to_return += self.panel.update(i)
 
-        if self.toshow['quiver']:
+        if self.show_quiver:
             self.quiver.set_offsets(self.r)
             self.quiver.set_UVC(self.v[:, 0], self.v[:, 1])
             to_return += (self.quiver,)
@@ -469,7 +539,7 @@ class Box(object):
             lw = 5.
             self.circles.set_lw([lw if h else 0. for h in highlighted])
             self.circles.set_edgecolors(['yellow' if h else 'black' for h in highlighted])
-            if self.toshow['quiver']:
+            if self.show_quiver:
                 self.quiver.set_UVC(highlighted*self.v[:, 0], highlighted*self.v[:, 1])
 
         return to_return
@@ -722,10 +792,5 @@ class Box(object):
 
         return r1f, v1f, r2f, v2f
 
-    def show(self, what=None):
-        if what is None:
-            plt.ion()
-        elif what not in self.toshow:
-            raise RuntimeError('Can show only' + str(self.toshow.keys()))
-        self.toshow[what] = True
-        self._init()
+    def show(self):
+        plt.ion()

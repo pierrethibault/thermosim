@@ -1,7 +1,7 @@
 import thermosim
 
 b = thermosim.Box.generic(N=500)
-b.show('velocities')
+b.side_panel = 'velocities'
 b.dt = 1.
 b.v[:, 1] = 0.
 b.v[:, 0] = 1.
