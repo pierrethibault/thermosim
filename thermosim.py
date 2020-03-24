@@ -304,6 +304,9 @@ class Box(object):
 
         self.highlight_rule = None
 
+        self._collision_callback = None
+        self._walls_callback = None
+        self._obs_callback = None
 
     @classmethod
     def generic(cls, N=150, L=200., D=3., T=1., ndim=2):
@@ -564,13 +567,15 @@ class Box(object):
         self.r += self.dt * self.v
         self.t += self.dt
 
-        self.walls()
-        self.collide()
-        self.obs_collide()
+        self.walls(self._walls_callback)
+        self.collide(callback=self._collision_callback)
+        self.obs_collide(self._obs_callback)
 
-    def walls(self):
+    def walls(self, callback=None):
         """
         Process wall collisions.
+
+        TODO: implement wall callback
         """
         for dim in range(self.ndim):
             # "Negative" wall
@@ -590,9 +595,11 @@ class Box(object):
                 self._wall_momentum.append(self._wall_momentum[-1] - 2 * sum(self.m[d1 > 0] * self.v[d1 > 0, dim]))
                 self._wall_momentum_theory = self.P*self.L[dim]*self.t
 
-    def obs_collide(self):
+    def obs_collide(self, callback=None):
         """
         Process collisions with additional rectangular obstacles
+
+        TODO: implement obstacle callback
         """
         for obs in self.obstacles:
             vc = obs['vertices']
@@ -673,9 +680,12 @@ class Box(object):
             self.v[hit] = v
             self.r[hit] = r
 
-    def collide(self):
+    def collide(self, callback=None):
         """
         Process eventual collisions
+
+        callback, if not None, is a function with signature callback(self, particle_index1, particle_index2)
+        and is called after updating positions and velocities.
         """
 
         # Find colliding particles
@@ -735,6 +745,9 @@ class Box(object):
             self.r[p2] = r2f
             self.v[p1] = v1f
             self.v[p2] = v2f
+
+            if callback is not None:
+                callback(self, p1, p2)
 
     @staticmethod
     def _disc_collide(r1, v1, d1, m1, r2, v2=None, d2=0., m2=None):
