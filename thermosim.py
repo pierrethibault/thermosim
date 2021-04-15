@@ -252,6 +252,7 @@ class Box(object):
 
         self.show_trace = None
         self.show_quiver = None
+        self.quiver_scale = 35.
 
         # For molecule trace
         self._vtrace = None
@@ -268,6 +269,7 @@ class Box(object):
 
         self._i = None
         self.animobj = None
+        self.interval = 5.
 
         self.highlight_rule = None
 
@@ -311,7 +313,7 @@ class Box(object):
         """
         self._i = 0
         self.nsteps = nsteps
-        self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=5., repeat=False, blit=blit)
+        self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=self.interval, repeat=False, blit=blit)
         if filename is not None:
             Writer = animation.writers['ffmpeg']
             writer = Writer(fps=150, bitrate=500, extra_args=['-filter', 'tblend', '-r', '25'])
@@ -376,7 +378,7 @@ class Box(object):
 
         # Option to show velocity arrows
         if self.show_quiver:
-            quiver = plt.quiver(cb.r[:, 0], cb.r[:, 1], cb.v[:, 0], cb.v[:, 1], units='xy', scale=35.*cb.vRMS/cb.L.mean())
+            quiver = plt.quiver(cb.r[:, 0], cb.r[:, 1], cb.v[:, 0], cb.v[:, 1], units='xy', scale=self.quiver_scale*cb.vRMS/cb.L.mean())
             self.quiver = quiver
             to_return += (quiver,)
 

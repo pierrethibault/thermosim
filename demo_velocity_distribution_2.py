@@ -1,4 +1,5 @@
 import thermosim
+import numpy as np
 
 b = thermosim.Box.generic(N=500)
 b.panel = thermosim.VelocityPanel(b)
