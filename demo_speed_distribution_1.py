@@ -1,7 +1,7 @@
 import thermosim
 
 b = thermosim.Box.generic(N=500)
-b.side_panel = 'speeds'
+thermosim.SpeedPanel(b)
 b.dt = 1.
 b.v[:, 1] = 0.
 b.v[:, 0] = 1.

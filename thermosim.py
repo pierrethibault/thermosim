@@ -22,14 +22,17 @@ class VelocityPanel(object):
     """
     def __init__(self, box):
         self.box = box
+        self.cbox = box.cbox
+        box.panel = self
 
     def init(self, ax):
         self.ax = ax
         self.ax.clear()
         b = self.box
+        cb = self.cbox
         ax.set_xlabel('velocity along x')
         ax.get_yaxis().set_visible(False)
-        f, bins = np.histogram(b.v[:, 0], int(np.sqrt(b.N)), range=(b.vxmin, b.vxmax), density=True)
+        f, bins = np.histogram(cb.v[:, 0], int(np.sqrt(cb.N)), range=(cb.vxmin, cb.vxmax), density=True)
         binwidth = bins[1] - bins[0]
 
         # Create bar graph
@@ -42,18 +45,19 @@ class VelocityPanel(object):
 
     def update(self, i):
         b = self.box
+        cb = self.cbox
 
         # Recompute histogram
         nbins = len(self.vhist)
-        f, bins = np.histogram(b.v[:, 0], nbins, range=(b.vxmin, b.vxmax), density=True)
-        self.ax.set_xlim(b.vxmin, b.vxmax)
+        f, bins = np.histogram(cb.v[:, 0], nbins, range=(cb.vxmin, cb.vxmax), density=True)
+        self.ax.set_xlim(cb.vxmin, cb.vxmax)
         binwidth = bins[1] - bins[0]
 
         # Update histogram
         for i in range(nbins):
             self.vhist[i].set_height(f[i])
             self.vhist[i].set_width(binwidth)
-            self.vhist[i].set_facecolor(b.cm((bins[i] + .5 * binwidth) ** 2 / b.v2max))
+            self.vhist[i].set_facecolor(b.cm((bins[i] + .5 * binwidth) ** 2 / cb.v2max))
             self.vhist[i].set_x(bins[i])
         # Adjust vertical extent.
         ylim = self.ax.get_ylim()[1]
@@ -64,22 +68,25 @@ class VelocityPanel(object):
 
         return self.vhist,
 
-
 class SpeedPanel(object):
     """
     A display panel in addition to the box. Here, showing velocity histogram
     """
     def __init__(self, box):
         self.box = box
+        self.cbox = box.cbox
+        box.panel = self
 
     def init(self, ax):
         self.ax = ax
         self.ax.clear()
         b = self.box
+        cb = self.cbox
+
         ax.set_xlabel('velocity along x')
         ax.get_yaxis().set_visible(False)
-        f, bins = np.histogram(np.sqrt((b.v ** 2).sum(axis=1)), int(np.sqrt(b.N)),
-                                range=(0., b.v2max), density=True)
+        f, bins = np.histogram(np.sqrt((cb.v ** 2).sum(axis=1)), int(np.sqrt(cb.N)),
+                                range=(0., cb.v2max), density=True)
         binwidth = bins[1] - bins[0]
 
         # Create bar graph
@@ -92,18 +99,19 @@ class SpeedPanel(object):
 
     def update(self, i):
         b = self.box
+        cb = self.cbox
 
         # Recompute histogram
         nbins = len(self.vhist)
-        f, bins = np.histogram(np.sqrt((b.v**2).sum(axis=1)), nbins, range=(0, b.v2max), density=True)
-        self.ax.set_xlim(0, b.v2max)
+        f, bins = np.histogram(np.sqrt((cb.v**2).sum(axis=1)), nbins, range=(0, cb.v2max), density=True)
+        self.ax.set_xlim(0, cb.v2max)
         binwidth = bins[1] - bins[0]
 
         # Update histogram
         for i in range(nbins):
             self.vhist[i].set_height(f[i])
             self.vhist[i].set_width(binwidth)
-            self.vhist[i].set_facecolor(b.cm((bins[i] + .5 * binwidth) ** 2 / b.v2max))
+            self.vhist[i].set_facecolor(b.cm((bins[i] + .5 * binwidth) ** 2 / cb.v2max))
             self.vhist[i].set_x(bins[i])
         # Adjust vertical extent.
         ylim = self.ax.get_ylim()[1]
@@ -121,17 +129,21 @@ class MFPPanel(object):
 
     def __init__(self, box):
         self.box = box
+        self.cbox = box.cbox
         self.trace_length = 1
         self.nbins = 30
+        box.panel = self
 
     def init(self, ax):
         self.ax = ax
         ax.clear()
         b = self.box
+        cb = self.cbox
+
         ax.set_xlabel('free path')
         ax.get_yaxis().set_visible(False)
         ax.set_ylim(ymin=0.)
-        f, bins = np.histogram([], self.nbins, range=(0, 3*b.mfp), density=True)
+        f, bins = np.histogram([], self.nbins, range=(0, 3*cb.mfp), density=True)
         binwidth = bins[1] - bins[0]
 
         # Create bar graph
@@ -144,15 +156,16 @@ class MFPPanel(object):
 
     def update(self, i):
         b = self.box
+        cb = self.cbox
 
         # Recompute histogram
-        x, y = b.trace.get_data()
+        x, y = cb.trace.get_data()
         if len(x) <= self.trace_length:
             # Nothing to do
             return self.vhist,
         self.trace_length = len(x)
         paths = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
-        xlim = max(3*b.mfp, paths.max())
+        xlim = max(3*cb.mfp, paths.max())
         f, bins = np.histogram(paths, self.nbins, range=(0, xlim), density=True)
         self.ax.set_xlim(0, xlim)
         binwidth = bins[1] - bins[0]
@@ -175,17 +188,18 @@ class PressurePanel(object):
 
     def __init__(self, box):
         self.box = box
+        self.cbox = box.cbox
         self.trace_length = 1
         self.nbins = 30
+        box.panel = self
 
     def init(self, ax):
         self.ax = ax
         ax.clear()
-        self.box._pressure = 0
+        self.cbox._pressure = 0
         self.plot_pressure = ax.plot([0], [0], 'b-', label='Total momentum')[0]
         self.plot_pressure_theory = ax.plot([0, 0], [0, 0], 'k-', label='Total momentum (theory)')[0]
         ax.legend(loc='upper left')
-        b = self.box
         ax.set_xlabel('time')
         ax.set_ylabel('momentum')
         ax.set_ylim(ymin=0.)
@@ -197,12 +211,13 @@ class PressurePanel(object):
 
     def update(self, i):
         b = self.box
+        cb = self.cbox
 
         # Update plot data
-        self.plot_pressure.set_data(b._pressure_t, b._wall_momentum)
-        self.plot_pressure_theory.set_data([0, b._pressure_t[-1]], [0, b._wall_momentum_theory])
-        self.ax.set_xlim(0, b._pressure_t[-1])
-        self.ax.set_ylim(np.min(b._wall_momentum), np.max(b._wall_momentum))
+        self.plot_pressure.set_data(cb._pressure_t, cb._wall_momentum)
+        self.plot_pressure_theory.set_data([0, cb._pressure_t[-1]], [0, cb._wall_momentum_theory])
+        self.ax.set_xlim(0, cb._pressure_t[-1])
+        self.ax.set_ylim(np.min(cb._wall_momentum), np.max(cb._wall_momentum))
         return self.plot_pressure, self.plot_pressure_theory
 
 class TimePanel(object):
@@ -212,6 +227,7 @@ class TimePanel(object):
 
     def __init__(self, box):
         self.box = box
+        box.panel = self
 
     def init(self, ax):
         self.ax = ax
@@ -223,6 +239,263 @@ class TimePanel(object):
 
 
 class Box(object):
+
+    def __init__(self, cbox, **kwargs):
+        """
+        Wrapper for a CBox implementing visualisation.
+        """
+        self.cbox = cbox
+
+        self.fig = plt.figure()
+
+        self.panel = None
+
+        self.show_trace = None
+        self.show_quiver = None
+
+        # For molecule trace
+        self._vtrace = None
+
+        # Default coloring
+        self.colors = 'velocities'
+
+        self._colors = None
+
+        self.cids = []
+
+        # Create display
+        self._init()
+
+        self._i = None
+        self.animobj = None
+
+        self.highlight_rule = None
+
+        self._update_callback = None
+
+    @classmethod
+    def generic(cls, N=150, L=200., D=3., T=1., ndim=2):
+        """
+        Create a generic box with a given number of particles, given diameter, box dimensions and reduced temperature.
+        self.N = N  # number of particles
+        """
+        if np.isscalar(L):
+            L = L*np.ones((ndim,))
+
+        # Positions
+        r = np.array([L[i]*np.random.uniform(size=(N,)) for i in range(ndim)]).T
+
+        # Masses
+        m = np.ones((N,))
+
+        # Diameters
+        d = D*np.ones((N,))
+
+        # Velocities
+        v = np.random.normal(size=(N, ndim))
+        v /= np.sqrt((v**2).sum()/N)
+        v *= np.sqrt(2*T/m[:, np.newaxis])
+
+        cbox = CBox(L, r, v, d, m)
+
+        return cls(cbox)
+
+    def run(self, nsteps=100000, filename=None, blit=False, block=None):
+        """Start animation
+
+        nsteps: number of steps
+        filename: if not None, movie file to save to (work in progress)
+        blit: False by default, does not work always
+        block: if True, return only after run is done, if False return immediately
+               if None, returns only in interactive mode
+        """
+        self._i = 0
+        self.nsteps = nsteps
+        self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=5., repeat=False, blit=blit)
+        if filename is not None:
+            Writer = animation.writers['ffmpeg']
+            writer = Writer(fps=150, bitrate=500, extra_args=['-filter', 'tblend', '-r', '25'])
+            self.animobj._start()
+            self.animobj.save(filename, writer=writer)
+        else:
+            self.animobj._start()
+            plt.show(block=False)
+            if block or ((block is None) and not hasattr(sys, 'ps1')):
+                plt.pause(.1)
+                while self.animobj.event_source and self.animobj.event_source.callbacks:
+                    plt.pause(.1)
+
+    def stop(self):
+        try:
+            self.animobj._stop()
+        except:
+            pass
+
+    def _init(self):
+        """
+        Initialise display
+        """
+        cb = self.cbox
+
+        # No update during setup
+        plt.ioff()
+        self.fig.clear()
+
+        if self.panel is not None:
+            # Create two side-by-side axes, with a histogram of the x-component of the velodicities in the second one.
+            axes = [self.fig.add_subplot(121, aspect='equal', adjustable='box'),
+                    self.fig.add_subplot(122)]
+        else:
+            # Create just one axis - the particle box
+            axes = [self.fig.add_subplot(111, aspect='equal', adjustable='box')]
+
+        # Set box size and axis properties
+        axes[0].axis([0, cb.L[0], 0, cb.L[1]])
+        axes[0].get_xaxis().set_visible(False)
+        axes[0].get_yaxis().set_visible(False)
+
+        # Draw particles
+        circles = EllipseCollection(widths=cb.d, heights=cb.d, angles=0, units='xy',
+                                    facecolors='k', offsets=cb.r, transOffset=axes[0].transData)
+        axes[0].add_collection(circles)
+
+        # Create colormap
+        self.cm = plt.get_cmap('plasma')
+
+        self.fig.tight_layout()
+        self.circles = circles
+
+        to_return = (circles,)
+
+        # Option to show the trace of one particle (to illustrate random walk)
+        if self.show_trace is not None:
+            i = self.show_trace
+            self.trace = axes[0].plot([cb.r[i, 0]], [cb.r[i,1]], 'k-')[0]
+            self._vtrace = cb.v[i].copy()
+            to_return += (self.trace,)
+
+        # Option to show velocity arrows
+        if self.show_quiver:
+            quiver = plt.quiver(cb.r[:, 0], cb.r[:, 1], cb.v[:, 0], cb.v[:, 1], units='xy', scale=35.*cb.vRMS/cb.L.mean())
+            self.quiver = quiver
+            to_return += (quiver,)
+
+        self.axes = axes
+
+        if self.panel is not None:
+            to_return += self.panel.init(axes[1])
+
+        # Process all obstacles (polygons)
+        if cb.obstacles:
+            for obs in cb.obstacles:
+                vc = obs['vertices']
+                axes[0].add_patch(Polygon(vc, facecolor='black'))
+
+        # (re)connect events
+        self._connect()
+
+        return to_return
+
+    def set_fig_position(self, x, y, dx, dy):
+        """Set figure windoe position (might work only with QT backend)"""
+        plt.get_current_fig_manager().window.setGeometry(x, y, dx, dy)
+
+    def set_colors(self, colors=None):
+        if colors is None:
+            colors = self._colors
+        else:
+            self._colors = colors
+        self.circles.set_facecolors(colors)
+
+    def _connect(self):
+        """
+        Manage event connections
+        FIXME: This does not work.
+        """
+        canvas = self.fig.canvas
+        # Disconnect eventual connections
+        for cid in self.cids:
+            canvas.mpl_disconnect(cid)
+        # Reconnect
+        self.cids.append(canvas.mpl_connect('button_press_event', self.onpress))
+        self.cids.append(canvas.mpl_connect('key_press_event', self.onkeypress))
+        self.cids.append(canvas.mpl_connect('close_event', self.onclose))
+        self.cids.append(canvas.mpl_connect('scroll_event', self.onscroll))
+        return
+
+    def onpress(self, event):
+        pass
+
+    def onkeypress(self, event):
+        if event.key in ['space']:
+            print('blip!')
+            #self.animobj._stop()
+
+    def onclose(self, event):
+        pass
+
+    def onscroll(self, event):
+        pass
+
+    def _update(self, i):
+        """Update plot"""
+        cb = self.cbox
+
+        self.i = i
+
+        # Compute move
+        cb.step()
+
+        # Move molecules
+        self.circles.set_offsets(cb.r)
+
+        # Change colours
+        if self.colors == 'velocities':
+            vmag = np.sqrt((cb.v**2).sum(axis=1))
+            self.set_colors(self.cm(vmag/cb.v2max))
+
+        to_return = (self.circles,)
+
+        if self.panel is not None:
+            to_return += self.panel.update(i)
+
+        if self.show_trace is not None:
+            i = self.show_trace
+            newv = cb.v[i]
+            x, y = self.trace.get_data()
+            if not np.allclose(self._vtrace, newv):
+                x = np.append(x, cb.r[i,0])
+                y = np.append(y, cb.r[i,1])
+            else:
+                x[-1] = cb.r[i,0]
+                y[-1] = cb.r[i,1]
+            self.trace.set_data(x,y)
+            self._vtrace = newv.copy()
+            to_return += (self.trace,)
+
+        if self.show_quiver:
+            self.quiver.set_offsets(cb.r)
+            self.quiver.set_UVC(cb.v[:, 0], cb.v[:, 1])
+            to_return += (self.quiver,)
+
+        if self.highlight_rule:
+            highlighted = eval(self.highlight_rule, cb.__dict__)
+            lw = 5.
+            self.circles.set_lw([lw if h else 0. for h in highlighted])
+            self.circles.set_edgecolors(['yellow' if h else 'black' for h in highlighted])
+            if self.show_quiver:
+                self.quiver.set_UVC(highlighted*cb.v[:, 0], highlighted*cb.v[:, 1])
+
+        if self._update_callback is not None:
+            self._update_callback(i)
+
+        return to_return
+
+    def show(self):
+        plt.ion()
+
+
+class CBox(object):
 
     def __init__(self, L, r, v, d, m, **kwargs):
         """
@@ -247,37 +520,26 @@ class Box(object):
 
         # Number of steps (defined in run)
         self.nsteps = None
-        
-        # Optimal time step ~ .25 * (D/v_RMS)
-        self.dt = .25*d.mean()/np.sqrt(2*(self.v**2).mean())
+
+        # Total time and time step (computed in init)
+        self.dt = None
+        self.t = 0.
+        self.i = 0
 
         # Mean free path
-        self.mfp = np.prod(L)/(4.*N*d.mean())
+        self.mfp = None
 
         # Initialise other necessary attributes
         self.r0 = None  # This will store the previous positions
         self.v0 = None  # For previous velocities
 
         # Gravity
-        self.g = -.1
-        self.t = 0.
+        self.g = 0.
 
-        self.v2max = np.sqrt((self.v**2).sum(axis=1)).max()
-        self.vxmin, self.vxmax = self.v[:, 0].min(), self.v[:, 0].max()
-        self.vymin, self.vymax = self.v[:, 1].min(), self.v[:, 1].max()
-
-        self.fig = plt.figure()
-
-        # 'velocities', 'quiver', 'trace', 'speeds', 'pressure'
-        #self.toshow = {'velocities': False, 'quiver': False, 'trace': None, 'speeds': False}
-        self.side_panel = None
-        self.panel = None
-
-        self.show_trace = None
-        self.show_quiver = None
-
-        # For molecule trace
-        self._vtrace = None
+        # Velocity statistics
+        self.v2max = None
+        self.vxmin, self.vxmax = None, None
+        self.vymin, self.vymax = None, None
 
         # For pressure calculation
         self._pressure = None
@@ -285,28 +547,18 @@ class Box(object):
         self._wall_momentum_theory = 0.
         self._pressure_t = [0.]
 
-        # Real volume (will be computed in _init)
-        self.real_volume = 0.
+        # Real volume
+        self.real_volume = None
 
         # For obstacle collisions
         self.obstacles = []
 
-        # Default coloring
-        self.colors = 'velocities'
-
-        self._colors = None
-
-        # Create display
-        self._init()
-
-        self._i = None
-        self.animobj = None
-
-        self.highlight_rule = None
-
+        # Callbacks
         self._collision_callback = None
         self._walls_callback = None
         self._obs_callback = None
+
+        self.init()
 
     @classmethod
     def generic(cls, N=150, L=200., D=3., T=1., ndim=2):
@@ -348,204 +600,29 @@ class Box(object):
         """Pressure - in 2D, P = U/A"""
         return (.5*self.m * (self.v**2).sum(axis=1)).sum() / self.real_volume
 
-    def run(self, nsteps=100000, filename=None, blit=False, block=None):
-        """Start animation
-
-        nsteps: number of steps
-        filename: if not None, movie file to save to (work in progress)
-        blit: False by default, does not work always
-        block: if True, return only after run is done, if False return immediately
-               if None, returns only in interactive mode
+    def init(self):
         """
-        self._i = 0
-        self.nsteps = nsteps
-        self.animobj = animation.FuncAnimation(self.fig, self._update, frames=nsteps, interval=5., repeat=False, blit=blit)
-        if filename is not None:
-            Writer = animation.writers['ffmpeg']
-            writer = Writer(fps=150, bitrate=500, extra_args=['-filter', 'tblend', '-r', '25'])
-            self.animobj._start()
-            self.animobj.save(filename, writer=writer)
-        else:
-            self.animobj._start()
-            plt.show(False)
-            if block or ((block is None) and not hasattr(sys, 'ps1')):
-                plt.pause(.1)
-                while self.animobj.event_source and self.animobj.event_source.callbacks:
-                    plt.pause(.1)
-
-    def stop(self):
-        try:
-            self.animobj._stop()
-        except:
-            pass
-
-    def _init(self):
+        Reinitialise all quantities.
         """
-        Initialise display
-        """
+        # Velocity statistics
+        self.v2max = np.sqrt((self.v**2).sum(axis=1)).max()
+        self.vxmin, self.vxmax = self.v[:, 0].min(), self.v[:, 0].max()
+        self.vymin, self.vymax = self.v[:, 1].min(), self.v[:, 1].max()
 
-        # Recompute volume
+        # Optimal time step ~ .25 * (D/v_RMS)
+        self.dt = .25*self.d.mean()/np.sqrt(2*(self.v**2).mean())
+
+        # Mean free path
+        self.mfp = np.prod(self.L)/(4.*self.N*self.d.mean())
+
+        # Volume
         self.real_volume = np.prod(self.L-self.d.mean()) - .5*np.pi*sum(self.d**2)
 
-        # No update during setup
-        plt.ioff()
-        self.fig.clear()
-
-        if self.side_panel is not None:
-            # Create two side-by-side axes, with a histogram of the x-component of the velodicities in the second one. 
-            axes = [self.fig.add_subplot(121, aspect='equal', adjustable='box'),
-                    self.fig.add_subplot(122)]
-            if self.side_panel in ['velocity', 'velocities']:
-                self.panel = VelocityPanel(self)
-            elif self.side_panel in ['speed', 'speeds']:
-                self.panel = SpeedPanel(self)
-            elif self.side_panel == 'pressure':
-                self.panel = PressurePanel(self)
-            elif self.side_panel == 'trace':
-                self.panel = MFPPanel(self)
-            else:
-                RuntimeError('Unknown side_panel option %s' % self.side_panel)
-        else:
-            # Create just one axis - the particle box
-            axes = [self.fig.add_subplot(111, aspect='equal', adjustable='box')]
-
-        # Set box size and axis properties
-        axes[0].axis([0, self.L[0], 0, self.L[1]])
-        axes[0].get_xaxis().set_visible(False)
-        axes[0].get_yaxis().set_visible(False)
-
-        # Draw particles
-        circles = EllipseCollection(widths=self.d, heights=self.d, angles=0, units='xy',
-                                    facecolors='k', offsets=self.r, transOffset=axes[0].transData)
-        axes[0].add_collection(circles)
-
-        # Create colormap
-        self.cm = plt.get_cmap('plasma')
-
-        self.fig.tight_layout()
-        self.circles = circles
-
-        to_return = (circles,)
-
-        # Option to show the trace of one particle (to illustrate random walk)
-        if self.show_trace is not None:
-            i = self.show_trace
-            self.trace = axes[0].plot([self.r[i, 0]], [self.r[i,1]], 'k-')[0]
-            self._vtrace = self.v[i].copy()
-            to_return += (self.trace,)
-
-        # Option to show velocity arrows
-        if self.show_quiver:
-            quiver = plt.quiver(self.r[:, 0], self.r[:, 1], self.v[:, 0], self.v[:, 1], units='xy', scale=35.*self.vRMS/self.L.mean())
-            self.quiver = quiver
-            to_return += (quiver,)
-
-        self.axes = axes
-
-        if self.panel is not None:
-            to_return += self.panel.init(axes[1])
-
-        # Process all obstacles (polygons)
-        if self.obstacles:
-            for obs in self.obstacles:
-                vc = obs['vertices']
-                axes[0].add_patch(Polygon(vc, facecolor='black'))
-
-        return to_return
-
-    def set_fig_position(self, x, y, dx, dy):
-        """Set figure windoe position (might work only with QT backend)"""
-        plt.get_current_fig_manager().window.setGeometry(x, y, dx, dy)
-
-    def set_colors(self, colors=None):
-        if colors is None:
-            colors = self._colors
-        else:
-            self._colors = colors
-        self.circles.set_facecolors(colors)
-
-    def _update(self, i):
-        """Update plot"""
-        self.i = i
-
-        # Compute move
-        self._step()
-
-        # Velocity statistics
-        vmag = np.sqrt((self.v**2).sum(axis=1))
-        self.v2max = max(self.v2max, vmag.max())
-        self.vxmax = max(self.vxmax, self.v[:, 0].max())
-        self.vxmin = min(self.vxmin, self.v[:, 0].min())
-        self.vymax = max(self.vymax, self.v[:, 1].max())
-        self.vymin = min(self.vymin, self.v[:, 1].min())
-
-        # Move molecules
-        self.circles.set_offsets(self.r)
-
-        # Change colours
-        if self.colors == 'velocities':
-            self.set_colors(self.cm(vmag/self.v2max))
-
-        to_return = (self.circles,)
-
-        if self.panel is not None:
-            to_return += self.panel.update(i)
-
-        """
-            # Recompute histogram
-            nbins = len(self.vhist)
-            if show_v:
-                f, bins = np.histogram(self.v[:, 0], nbins, range=(self.vxmin, self.vxmax), density=True)
-                self.axes[1].set_xlim(self.vxmin, self.vxmax)
-            else:
-                f, bins = np.histogram(np.sqrt((self.v**2).sum(axis=1)), nbins, range=(0, self.v2max), density=True)
-                self.axes[1].set_xlim(0, self.v2max)
-
-            binwidth = bins[1]-bins[0]
-            # Update histogram
-            for i in range(nbins):
-                self.vhist[i].set_height(f[i])
-                self.vhist[i].set_width(binwidth)
-                self.vhist[i].set_facecolor(self.cm((bins[i]+.5*binwidth)**2/self.v2max))
-                self.vhist[i].set_x(bins[i])
-            # Adjust vertical extent.
-            ylim = self.axes[1].get_ylim()[1]
-            dylim = 1.2*f.max() - ylim
-            if abs(dylim) > .1*ylim:
-                new_ylim = ylim +.1*(dylim)
-                self.axes[1].set_ylim(ymax=new_ylim)
-
-            to_return += (self.vhist,)
-        """
-        
-        if self.show_trace is not None:
-            i = self.show_trace
-            newv = self.v[i]
-            x, y = self.trace.get_data()
-            if not np.allclose(self._vtrace, newv):
-                x = np.append(x, self.r[i,0])
-                y = np.append(y, self.r[i,1])
-            else:
-                x[-1] = self.r[i,0]
-                y[-1] = self.r[i,1]
-            self.trace.set_data(x,y)
-            self._vtrace = newv.copy()
-            to_return += (self.trace,)
-
-        if self.show_quiver:
-            self.quiver.set_offsets(self.r)
-            self.quiver.set_UVC(self.v[:, 0], self.v[:, 1])
-            to_return += (self.quiver,)
-
-        if self.highlight_rule:
-            highlighted = eval(self.highlight_rule, self.__dict__)
-            lw = 5.
-            self.circles.set_lw([lw if h else 0. for h in highlighted])
-            self.circles.set_edgecolors(['yellow' if h else 'black' for h in highlighted])
-            if self.show_quiver:
-                self.quiver.set_UVC(highlighted*self.v[:, 0], highlighted*self.v[:, 1])
-
-        return to_return
+        # For pressure calculation
+        self._pressure = None
+        self._wall_momentum = [0.]
+        self._wall_momentum_theory = 0.
+        self._pressure_t = [0.]
 
     def add_obstacle(self, vc):
         """
@@ -562,14 +639,33 @@ class Box(object):
         # Store
         self.obstacles.append({'vertices': vc, 'edges': edges})
 
-    def _step(self):
-        """Move molecules"""
+    def update_stats(self):
+        """
+        Update statistics
+        """
+        vmag = np.sqrt((self.v**2).sum(axis=1))
+        self.v2max = max(self.v2max, vmag.max())
+        self.vxmax = max(self.vxmax, self.v[:, 0].max())
+        self.vxmin = min(self.vxmin, self.v[:, 0].min())
+        self.vymax = max(self.vymax, self.v[:, 1].max())
+        self.vymin = min(self.vymin, self.v[:, 1].min())
+
+    def step(self):
+        """
+        Move by one step
+        """
+        # Increment
+        self.i += 1
         self.r += self.dt * self.v
         self.t += self.dt
 
+        # Process collisions
         self.walls(self._walls_callback)
         self.collide(callback=self._collision_callback)
         self.obs_collide(self._obs_callback)
+
+        # Update statistics
+        self.update_stats()
 
     def walls(self, callback=None):
         """
@@ -748,62 +844,3 @@ class Box(object):
 
             if callback is not None:
                 callback(self, p1, p2)
-
-    @staticmethod
-    def _disc_collide(r1, v1, d1, m1, r2, v2=None, d2=0., m2=None):
-        """
-        Collision between two discs.
-        """
-        if v2 is None:
-            v2 = v1*0.
-
-        # Relative positions and velocities
-        dv = v2 - v1
-        dr = r2 - r1
-
-        # Backtrack
-        ndv = norm(dv)
-        if ndv == 0:
-            # Special case: overlapping particles with same velocities
-            ndr = norm(dr)
-            offset = .5 * dr * (.5 * (d1 + d2) / ndr - 1.)
-            r1out = r1 - offset
-            r2out = r2 + offset
-            return r1out, v1, r2out, v2
-
-        ru = np.dot(dv, dr) / ndv
-        b2 = ru ** 2 + .25 * (d1 + d2) ** 2 - np.dot(dr, dr)
-        if b2 < 0:
-            # No collision
-            return None, None, None, None
-        ds = ru + sqrt(b2)
-
-        # Time since collision
-        dtc = ds / ndv
-
-        # New collision parameter
-        drc = dr - dv * dtc
-
-        # Center of mass velocity
-        if m2 is None:
-            m1r = 0,
-            m2r = 1.
-        else:
-            m1r = m1/(m1+m2)
-            m2r = m2/(m1+m2)
-
-        vcm = m1r * v1 + m2r * v2
-
-        # Velocities after collision
-        dvf = dv - 2. * drc * np.dot(dv, drc) / np.dot(drc, drc)
-        v1f = vcm - dvf * m2r
-        v2f = vcm + dvf * m1r
-
-        # Backtracked positions
-        r1f = r1 + (v1f - v1) * dtc
-        r2f = r2 + (v2f - v2) * dtc
-
-        return r1f, v1f, r2f, v2f
-
-    def show(self):
-        plt.ion()

@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 N = 1200
 l = 300
 b = thermosim.Box.generic(N=N, L=[l, l], D=1.1)
+cb = b.cbox
 
 img = 1. - plt.imread('text.png')[::-1, :]
 ymin = np.nonzero(img.sum(axis=1))[0][0]-1
@@ -22,16 +23,16 @@ xyint = np.round(xy).astype(int)
 good = img[xyint[:, 1], xyint[:, 0]] > .5
 imax = np.nonzero(np.cumsum(good)>N)[0][0]
 good[imax:] = False
-b.r = xy[good]
+cb.r = xy[good]
 
 b._init()
 #b.set_colors('k')
 b.fig.set_size_inches((12, 12), forward=True)
 #b.run(1, block=True)
-b.dt = .02
+cb.dt = .02
 b.run(600, block=True)
-b.v *= -1
-b.dt = .04
+cb.v *= -1
+cb.dt = .04
 print("b.run(300)")
 
 
